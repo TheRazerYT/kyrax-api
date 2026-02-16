@@ -1,20 +1,31 @@
 const express = require('express');
 const cors = require('cors');
 const app = express();
-app.use(cors());
-app.use(express.json());
+app.use(cors(), express.json());
 
-let scriptActive = false; // Ez a távoli kapcsoló állapota
+let servers = {};
 
-// Ezt nézi a FiveM script
-app.get('/status', (req, res) => {
-    res.json({ active: scriptActive });
+// FiveM script hívja ezt
+app.post('/heartbeat', (req, res) => {
+    const { token, name, ip, players } = req.body;
+    if (!servers[token]) servers[token] = { enabled: true }; // Alapból bekapcsolva
+    servers[token] = { ...servers[token], name, ip, players, lastSeen: Date.now() };
+    res.json({ enabled: servers[token].enabled });
 });
 
-// Ezt hívja az Electron appod
+// Electron app hívja ezt a kapcsoláshoz
 app.post('/toggle', (req, res) => {
-    scriptActive = req.body.state;
-    res.json({ success: true, currentState: scriptActive });
+    const { token, state } = req.body;
+    if (servers[token]) {
+        servers[token].enabled = state;
+        res.json({ success: true });
+    } else {
+        res.status(404).json({ error: "Szerver nem található" });
+    }
 });
 
-app.listen(3000, () => console.log("API fut a 3000-es porton"));
+app.get('/list', (req, res) => {
+    res.json(Object.keys(servers).map(t => ({ token: t, ...servers[t] })));
+});
+
+app.listen(3000, () => console.log("C2 API ONLINE: 3000"));
